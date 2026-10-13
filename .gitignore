@@ -1,0 +1,10 @@
+# Godot 4
+.godot/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
