@@ -187,20 +187,39 @@ func end_run(victory: bool) -> void:
 	for item in loot_bag:
 		Stash.add_item(item)
 	loot_bag.clear()
+	# Roster consequences: XP for survivors, wounds for the downed.
+	# (Debug characters aren't on the roster — skip them.)
+	for m in squad:
+		var cid := String(m.get("char_id", ""))
+		if cid.begins_with("debug_"):
+			continue
+		var was_downed := bool(m.get("downed", false))
+		Roster.apply_post_run(cid, run_level * 10, was_downed)
 	run_ended.emit(victory)
 
 
 # ---- Gear drops ----
 
-func roll_drop() -> Dictionary:
+func roll_drop(min_rarity: String = "") -> Dictionary:
 	# Called on enemy death. Returns an item def (as a fresh instance dict) or {}.
+	# min_rarity forces the roll to that rarity or better (elites).
 	var minutes := run_time / 60.0
 	var chance: float = minf(float(tun("drops.max_chance", 0.09)),
 		float(tun("drops.base_chance", 0.035)) + minutes * float(tun("drops.time_scale_per_min", 0.004)))
+	if min_rarity != "":
+		chance = 1.0
 	if randf() > chance or item_defs.is_empty():
 		return {}
 	var weights: Dictionary = (tun("drops.rarity_weights", {"common": 50.0, "magic": 28.0, "rare": 14.0, "epic": 6.0, "legendary": 2.0}) as Dictionary).duplicate()
 	# Legendary odds creep up over the run. (Duplicate above: never mutate the live tuning config.)
+	weights["legendary"] = float(weights.get("legendary", 2.0)) + minutes * float(tun("drops.legendary_weight_per_min", 0.35))
+	if min_rarity != "":
+		# Zero out everything below the floor.
+		var order := ["common", "magic", "rare", "epic", "legendary"]
+		var floor_idx := order.find(min_rarity)
+		for i in order.size():
+			if i < floor_idx:
+				weights[order[i]] = 0.0
 	# Legendary odds creep up over the run.
 	weights["legendary"] = float(weights.get("legendary", 2.0)) + minutes * float(tun("drops.legendary_weight_per_min", 0.35))
 	var total := 0.0

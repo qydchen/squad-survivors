@@ -30,6 +30,16 @@ var touch_cd := 0.0
 var shoot_cd := 0.0
 var flash_left := 0.0   # hit flash (feel)
 var spawn_age := 0.0    # spawn telegraph: materializes over 0.35s
+var is_elite := false
+var affixes: Array = []  # e.g. ["swift", "brutal"]
+
+
+const AFFIX_INFO := {
+	"swift": {"name": "Swift", "desc": "+35% move speed"},
+	"brutal": {"name": "Brutal", "desc": "+50% damage"},
+	"titanic": {"name": "Titanic", "desc": "+120% HP"},
+	"volatile": {"name": "Volatile", "desc": "Explodes on death"},
+}
 
 
 func setup(def: Dictionary) -> void:
@@ -51,6 +61,22 @@ func setup(def: Dictionary) -> void:
 	projectile_damage = float(def.get("projectile_damage", 0.0))
 	projectile_speed = float(def.get("projectile_speed", 260.0))
 	shoot_cd = randf_range(0.5, 1.5)
+	# Elites: bigger, tougher, affixed.
+	is_elite = bool(def.get("elite", false))
+	affixes = def.get("affixes", [])
+	if is_elite:
+		radius *= 1.6
+		xp_value *= 4
+		for a in affixes:
+			match String(a):
+				"swift":
+					speed *= 1.35
+				"brutal":
+					contact_damage *= 1.5
+					projectile_damage *= 1.5
+				"titanic":
+					max_hp *= 2.2
+					hp = max_hp
 
 
 func _physics_process(delta: float) -> void:
@@ -175,8 +201,22 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, by_player: boo
 		if dn != null:
 			dn.spawn(global_position, dmg, crit)
 	if hp <= 0.0:
+		if "volatile" in affixes:
+			_detonate()
 		died.emit(self)
 		queue_free()
+
+
+func _detonate() -> void:
+	# Volatile elite: explodes, hurting nearby squad members.
+	for n in get_tree().get_nodes_in_group("squad_members"):
+		var m := n as SquadMember
+		if m == null or not bool(m.member.get("alive", true)):
+			continue
+		if global_position.distance_to(m.global_position) < 130.0:
+			var dir: Vector2 = (m.global_position - global_position).normalized()
+			m.take_damage(contact_damage * 2.0, dir)
+	Puff.burst(get_parent(), global_position, Color(1.0, 0.5, 0.15), 12)
 
 
 func apply_slow(mult: float, duration: float) -> void:
@@ -187,6 +227,19 @@ func apply_slow(mult: float, duration: float) -> void:
 func _draw() -> void:
 	draw_circle(Vector2.ZERO, radius, body_color)
 	draw_arc(Vector2.ZERO, radius, 0, TAU, 20, Color(0, 0, 0, 0.4), 2.0)
+	if is_elite:
+		# Elite: gold crown ring + affix pips.
+		draw_arc(Vector2.ZERO, radius + 6, 0, TAU, 24, Color(1.0, 0.8, 0.25), 3.0)
+		var px := -12.0
+		for a in affixes:
+			var col := Color(1, 1, 1)
+			match String(a):
+				"swift": col = Color(0.5, 1.0, 0.6)
+				"brutal": col = Color(1.0, 0.4, 0.4)
+				"titanic": col = Color(0.7, 0.7, 1.0)
+				"volatile": col = Color(1.0, 0.6, 0.15)
+			draw_circle(Vector2(px, -radius - 12), 4.0, col)
+			px += 11.0
 	if enemy_id == "shieldbearer":
 		# Shield wedge showing the blocked arc.
 		var a := facing.angle()

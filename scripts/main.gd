@@ -6,14 +6,39 @@ extends Node2D
 @onready var hud: Hud = $HUD
 @onready var level_up_screen: LevelUpScreen = $LevelUpScreen
 @onready var inventory_screen: InventoryScreen = $InventoryScreen
+@onready var draft_screen: DraftScreen = $DraftScreen
+@onready var spawner: Spawner = $Spawner
 
 
 func _ready() -> void:
 	# NOTE: Main stays pausable (default). The R-restart shortcut lives in
 	# hud.gd because the HUD is PROCESS_MODE_ALWAYS and works while paused.
+	_seed_roster_if_empty()
 	Game.level_up_ready.connect(_on_level_up_ready)
-	# Debug squad: 5 of the 6 classes (drops the Arcanist for this comp).
-	Game.start_run_debug(["bulwark", "cleric", "ranger", "shadowblade", "stormcaller"])
+	draft_screen.deployed.connect(_on_deployed)
+	draft_screen.visible = true
+	hud.build_squad_frames()
+
+
+func _seed_roster_if_empty() -> void:
+	# First boot: a starter warband so the draft screen has something to show.
+	if not Roster.characters.is_empty():
+		return
+	var seeds := [
+		["bulwark", "Bromm"], ["bulwark", "Saria"],
+		["cleric", "Mira"], ["arcanist", "Vex"],
+		["ranger", "Talon"], ["ranger", "Kessa"],
+		["shadowblade", "Nyx"], ["stormcaller", "Rurik"],
+	]
+	for s in seeds:
+		Roster.add_character(s[0], s[1])
+	draft_screen.refresh()
+
+
+func _on_deployed(char_ids: Array) -> void:
+	draft_screen.visible = false
+	Game.start_run(char_ids)
+	spawner.reset()
 	_spawn_squad()
 	hud.build_squad_frames()
 
