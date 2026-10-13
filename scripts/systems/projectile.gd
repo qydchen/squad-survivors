@@ -12,6 +12,7 @@ var color := Color.WHITE
 var radius := 6.0
 var on_hit := ""  # e.g. "slow_30pct_2s"
 var life := 2.0
+var crit := false
 
 
 func _physics_process(delta: float) -> void:
@@ -26,7 +27,7 @@ func _physics_process(delta: float) -> void:
 		for n in get_tree().get_nodes_in_group("enemies"):
 			var e := n as Enemy
 			if e != null and global_position.distance_to(e.global_position) < radius + e.radius:
-				e.take_damage(damage, dir)
+				e.take_damage(damage, dir, true, crit)
 				_apply_on_hit(e)
 				deactivate()
 				return
@@ -47,7 +48,7 @@ func _apply_on_hit(e: Enemy) -> void:
 		e.apply_slow(0.7, 2.0)
 
 
-func activate(pos: Vector2, p_dir: Vector2, p_speed: float, p_damage: float, p_from_player: bool, p_color: Color, p_radius: float, p_on_hit: String) -> void:
+func activate(pos: Vector2, p_dir: Vector2, p_speed: float, p_damage: float, p_from_player: bool, p_color: Color, p_radius: float, p_on_hit: String, p_crit: bool = false) -> void:
 	global_position = pos
 	dir = p_dir.normalized()
 	speed = p_speed
@@ -56,6 +57,7 @@ func activate(pos: Vector2, p_dir: Vector2, p_speed: float, p_damage: float, p_f
 	color = p_color
 	radius = p_radius
 	on_hit = p_on_hit
+	crit = p_crit
 	life = 2.0
 	active = true
 	visible = true

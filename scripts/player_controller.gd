@@ -1,3 +1,4 @@
+class_name PlayerController
 extends Node2D
 ## PlayerController: moves the WARBAND ANCHOR (the group). The player controls
 ## one group — never individual characters.
@@ -11,13 +12,21 @@ const REVIVE_TIME := 3.0
 
 var revive_progress := 0.0
 var reviving_member: SquadMember = null
+var trauma := 0.0  # camera shake 0..1
+var cam: Camera2D = null
 
 
 func _ready() -> void:
 	add_to_group("warband_anchor")
+	cam = get_node_or_null("Camera2D") as Camera2D
+
+
+func add_shake(amount: float) -> void:
+	trauma = minf(1.0, trauma + amount)
 
 
 func _physics_process(delta: float) -> void:
+	_tick_shake(delta)
 	if not Game.in_run or Game.tactically_paused:
 		return
 	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
@@ -26,6 +35,13 @@ func _physics_process(delta: float) -> void:
 	global_position.y = clampf(global_position.y, -ARENA_HALF, ARENA_HALF)
 	_apply_stance()
 	_tick_revive(delta)
+
+
+func _tick_shake(delta: float) -> void:
+	trauma = maxf(0.0, trauma - delta * 1.6)
+	if cam != null:
+		var s := trauma * trauma * 26.0
+		cam.offset = Vector2(randf_range(-s, s), randf_range(-s, s))
 
 
 func _apply_stance() -> void:

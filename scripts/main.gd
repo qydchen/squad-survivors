@@ -5,12 +5,14 @@ extends Node2D
 @onready var anchor: Node2D = $WarbandAnchor
 @onready var hud: Hud = $HUD
 @onready var level_up_screen: LevelUpScreen = $LevelUpScreen
+@onready var inventory_screen: InventoryScreen = $InventoryScreen
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	Game.level_up_ready.connect(_on_level_up_ready)
-	Game.start_run_debug(["bulwark", "arcanist", "cleric"])
+	# Debug squad: 5 of the 6 classes (drops the Arcanist for this comp).
+	Game.start_run_debug(["bulwark", "cleric", "ranger", "shadowblade", "stormcaller"])
 	_spawn_squad()
 	hud.build_squad_frames()
 
@@ -43,6 +45,11 @@ func _on_level_up_ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("tactical_pause") and Game.in_run and not level_up_screen.visible:
 		Game.set_tactical_pause(not Game.tactically_paused)
+		get_viewport().set_input_as_handled()
+		return
+	# Tab: loot inventory. The game keeps running — sorting loot mid-swarm is a risk.
+	if event.is_action_pressed("squad_inventory") and Game.in_run and not level_up_screen.visible:
+		inventory_screen.toggle()
 		get_viewport().set_input_as_handled()
 		return
 	if not Game.in_run and event is InputEventKey:

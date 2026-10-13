@@ -12,6 +12,9 @@ var revive_label: Label
 var end_panel: CenterContainer
 var end_title: Label
 var squad_rows := {}  # char_id -> {hp_bar, level_label, name_label}
+var toast_label: Label
+var toast_queue: Array = []
+var toast_timer := 0.0
 
 
 func _ready() -> void:
@@ -60,7 +63,7 @@ func _build() -> void:
 
 	# Bottom center: hints.
 	var hints := Label.new()
-	hints.text = "WASD move group · Right-click focus target · C stance · Space pause"
+	hints.text = "WASD move group · Right-click focus target · C stance · Space pause · Tab loot"
 	hints.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	hints.position = Vector2(-330, -34)
 	hints.custom_minimum_size = Vector2(660, 0)
@@ -78,6 +81,18 @@ func _build() -> void:
 	revive_label.add_theme_font_size_override("font_size", 18)
 	revive_label.visible = false
 	add_child(revive_label)
+
+	# Loot toast (bottom right).
+	toast_label = Label.new()
+	toast_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	toast_label.position = Vector2(-420, -70)
+	toast_label.custom_minimum_size = Vector2(400, 0)
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	toast_label.add_theme_font_size_override("font_size", 15)
+	toast_label.modulate = Color(1, 1, 1, 0)
+	add_child(toast_label)
+
+	Game.loot_dropped.connect(_on_loot_dropped)
 
 	_build_end_screen()
 
@@ -145,6 +160,7 @@ func _process(_delta: float) -> void:
 	stance_label.text = "Stance: %s  (C)" % Game.stance.capitalize()
 	_update_squad_frames()
 	_update_revive()
+	_process_toast(_delta)
 
 
 func _update_squad_frames() -> void:
@@ -172,6 +188,33 @@ func _update_revive() -> void:
 		revive_label.text = "Reviving… %d%%" % int(100.0 * float(pc.get("revive_progress")) / 3.0)
 	else:
 		revive_label.visible = false
+
+
+func _on_loot_dropped(item: Dictionary) -> void:
+	var rarity := String(item.get("rarity", "common"))
+	toast_queue.append(item)
+	if toast_queue.size() > 3:
+		toast_queue.pop_front()
+	# Legendary drops auto-pause so you can feel it (design doc).
+	if rarity == "legendary":
+		Game.set_tactical_pause(true)
+		var pc := get_tree().get_first_node_in_group("warband_anchor") as PlayerController
+		if pc != null:
+			pc.add_shake(float(Game.tun("feel.shake_on_legendary", 0.35)))
+
+
+func _process_toast(delta: float) -> void:
+	if toast_queue.is_empty():
+		toast_label.modulate.a = maxf(0.0, toast_label.modulate.a - delta * 1.5)
+		return
+	var item: Dictionary = toast_queue[0]
+	var rarity := String(item.get("rarity", "common"))
+	toast_label.text = "◈ %s  (%s)" % [String(item.get("name", "?")), rarity.capitalize()]
+	toast_label.modulate = Game.rarity_color(rarity)
+	toast_timer += delta
+	if toast_timer > 2.5:
+		toast_timer = 0.0
+		toast_queue.pop_front()
 
 
 func _on_run_ended(victory: bool) -> void:

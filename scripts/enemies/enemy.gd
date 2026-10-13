@@ -28,6 +28,8 @@ var slow_left := 0.0
 var slow_mult := 1.0
 var touch_cd := 0.0
 var shoot_cd := 0.0
+var flash_left := 0.0   # hit flash (feel)
+var spawn_age := 0.0    # spawn telegraph: materializes over 0.35s
 
 
 func setup(def: Dictionary) -> void:
@@ -56,8 +58,19 @@ func _physics_process(delta: float) -> void:
 	stun_left = maxf(0.0, stun_left - delta)
 	slow_left = maxf(0.0, slow_left - delta)
 	touch_cd = maxf(0.0, touch_cd - delta)
+	flash_left = maxf(0.0, flash_left - delta)
 	if taunt_left <= 0.0:
 		taunted_by = null
+	# Spawn telegraph: materialize before acting.
+	spawn_age += delta
+	if spawn_age < 0.35:
+		var f := spawn_age / 0.35
+		scale = Vector2(f, f)
+		modulate.a = f
+		queue_redraw()
+		return
+	scale = Vector2.ONE
+	modulate.a = 1.0
 	if stun_left > 0.0:
 		velocity = Vector2.ZERO
 		move_and_slide()
@@ -149,13 +162,18 @@ func _try_shoot(delta: float, target: Node2D) -> void:
 	shoot_cd = projectile_cooldown
 
 
-func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO) -> void:
+func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO, by_player: bool = false, crit: bool = false) -> void:
 	var dmg := amount
 	# Shieldbearer frontal block: damage from the front arc is reduced.
 	if frontal_block > 0.0 and from_dir != Vector2.ZERO:
 		if facing.angle_to(-from_dir) < deg_to_rad(60.0):
 			dmg *= 1.0 - frontal_block
 	hp -= dmg
+	flash_left = 0.09
+	if by_player:
+		var dn := get_tree().get_first_node_in_group("damage_numbers") as DamageNumbers
+		if dn != null:
+			dn.spawn(global_position, dmg, crit)
 	if hp <= 0.0:
 		died.emit(self)
 		queue_free()
@@ -177,3 +195,9 @@ func _draw() -> void:
 		draw_circle(Vector2.ZERO, radius * 0.45, Color(1, 1, 1, 0.85))
 	if stun_left > 0.0:
 		draw_string(ThemeDB.fallback_font, Vector2(-6, -radius - 6), "*", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 0.4))
+	if flash_left > 0.0:
+		draw_circle(Vector2.ZERO, radius, Color(1, 1, 1, 0.75))
+	if spawn_age < 0.35:
+		# Materialization ring.
+		var f := spawn_age / 0.35
+		draw_arc(Vector2.ZERO, radius * (2.2 - f), 0, TAU, 20, Color(1, 0.4, 0.4, 0.8 * (1.0 - f)), 2.0)

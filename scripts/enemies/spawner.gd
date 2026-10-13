@@ -80,9 +80,17 @@ func _spawn_one(anchor_pos: Vector2) -> void:
 
 
 func _on_enemy_died(e: Enemy) -> void:
+	Puff.burst(get_parent(), e.global_position, e.body_color, 6)
 	# Drop XP gems.
 	for i in e.xp_value:
 		var g := XpGem.new()
 		g.value = 1
 		get_parent().add_child(g)
 		g.global_position = e.global_position + Vector2(randf_range(-14, 14), randf_range(-14, 14))
+	# Roll a gear drop.
+	var drop := Game.roll_drop()
+	if not drop.is_empty():
+		var loot := LootPickup.new()
+		get_parent().add_child(loot)
+		loot.global_position = e.global_position
+		loot.setup(drop)

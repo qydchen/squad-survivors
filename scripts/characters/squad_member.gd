@@ -19,6 +19,8 @@ var formation_offset := Vector2.ZERO
 var stance_spread := 1.0
 var attack_cd := 0.0
 var body_radius := 14.0
+var pet: Pet = null  # Ranger's animal companion (ability-granted).
+var flash_left := 0.0  # red hit flash (feel)
 
 
 func setup(squad_entry: Dictionary) -> void:
@@ -52,10 +54,44 @@ func _formation_offset_for(role: String) -> Vector2:
 			return Vector2(-80, randf_range(-70, 70))
 
 
+func gear_stat_total(key: String) -> float:
+	var total := 0.0
+	for slot in ["weapon", "armor", "trinket"]:
+		var item: Dictionary = (member.get("gear", {}) as Dictionary).get(slot, {})
+		total += float((item.get("stats", {}) as Dictionary).get(key, 0.0))
+	return total
+
+
 func get_stat(stat: String) -> float:
 	var base: float = float(class_def.get("base_stats", {}).get(stat, 0.0))
 	var mult: float = float(member.get("stat_mults", {}).get(stat, 1.0))
-	return base * mult
+	return base * mult * (1.0 + gear_stat_total(stat + "_pct")) + gear_stat_total(stat + "_flat")
+
+
+func has_affix(affix_id: String) -> bool:
+	for slot in ["weapon", "armor", "trinket"]:
+		var item: Dictionary = (member.get("gear", {}) as Dictionary).get(slot, {})
+		if String(item.get("affix", "")) == affix_id:
+			return true
+	return false
+
+
+func recalc_gear() -> void:
+	# Recompute max HP from gear; keep the current HP fraction.
+	var frac: float = float(member.get("hp", 1.0)) / maxf(1.0, float(member.get("max_hp", 1.0)))
+	var base_hp: float = float(class_def.get("base_stats", {}).get("max_hp", 100.0))
+	var rbonus: float = 1.0 + 0.02 * (int(member.get("roster_level", 1)) - 1)
+	var hp_mult: float = float(member.get("stat_mults", {}).get("max_hp_mult", 1.0))
+	var gear_pct := 0.0
+	var gear_flat := 0.0
+	for slot in ["weapon", "armor", "trinket"]:
+		var item: Dictionary = (member.get("gear", {}) as Dictionary).get(slot, {})
+		var stats: Dictionary = item.get("stats", {})
+		gear_pct += float(stats.get("max_hp_pct", 0.0))
+		gear_flat += float(stats.get("max_hp_flat", 0.0))
+	member["max_hp"] = base_hp * rbonus * hp_mult * (1.0 + gear_pct) + gear_flat
+	member["hp"] = float(member.get("max_hp", 1.0)) * frac
+	queue_redraw()
 
 
 func _physics_process(delta: float) -> void:
@@ -65,7 +101,24 @@ func _physics_process(delta: float) -> void:
 	_tick_timers(delta)
 	_try_attack(delta)
 	_try_abilities(delta)
+	_tick_volcanic(delta)
 	queue_redraw()
+
+
+func _tick_volcanic(delta: float) -> void:
+	# "volcanic" affix: periodic fire nova around the member.
+	if not has_affix("volcanic"):
+		return
+	var cd: float = float(member.get("volcanic_cd", 0.0)) - delta
+	if cd <= 0.0:
+		cd = 6.0
+		var dmg := get_stat("attack_power") * 2.0
+		for n in get_tree().get_nodes_in_group("enemies"):
+			var e := n as Enemy
+			if e != null and global_position.distance_to(e.global_position) < 170.0:
+				var to: Vector2 = (e.global_position - global_position).normalized()
+				e.take_damage(dmg, to, true)
+	member["volcanic_cd"] = cd
 
 
 func _move(_delta: float) -> void:
@@ -83,6 +136,7 @@ func _move(_delta: float) -> void:
 
 func _tick_timers(delta: float) -> void:
 	attack_cd = maxf(0.0, attack_cd - delta)
+	flash_left = maxf(0.0, flash_left - delta)
 	for a in member.get("abilities", []):
 		a["cd_left"] = maxf(0.0, float(a.get("cd_left", 0.0)) - delta)
 	for k in member.get("buffs", {}).keys():
@@ -121,17 +175,20 @@ func _try_attack(_delta: float) -> void:
 		return
 	var ap := get_stat("attack_power")
 	var dmg: float = ap * float(atk.get("damage_mult", 1.0))
-	var crit_roll := randf() < float(class_def.get("base_stats", {}).get("crit_chance", 0.05)) + float(member.get("stat_mults", {}).get("crit", 0.0))
+	var crit_chance: float = float(class_def.get("base_stats", {}).get("crit_chance", 0.05)) + float(member.get("stat_mults", {}).get("crit", 0.0)) + gear_stat_total("crit_flat")
+	if "shadowstep" in member.get("buffs", {}):
+		crit_chance += 0.5
+	var crit_roll := randf() < crit_chance
 	if crit_roll:
 		dmg *= 2.0
-	attack_cd = float(atk.get("cooldown", 1.0)) / maxf(0.2, get_stat("attack_speed"))
+	attack_cd = float(atk.get("cooldown", 1.0)) / maxf(0.2, get_stat("attack_speed") * _bloodlust_mult())
 	if kind == "melee_arc":
-		_melee_arc(target, atk, dmg)
+		_melee_arc(target, atk, dmg, crit_roll)
 	else:
-		_fire_projectile(target.global_position, atk, dmg, true)
+		_fire_projectile(target.global_position, atk, dmg, true, crit_roll)
 
 
-func _melee_arc(target: Node2D, atk: Dictionary, dmg: float) -> void:
+func _melee_arc(target: Node2D, atk: Dictionary, dmg: float, crit: bool) -> void:
 	var arc: float = deg_to_rad(float(atk.get("arc_degrees", 120.0)))
 	var rng: float = float(atk.get("range", 100.0))
 	var facing := (target.global_position - global_position).normalized()
@@ -140,20 +197,20 @@ func _melee_arc(target: Node2D, atk: Dictionary, dmg: float) -> void:
 		if e == null:
 			continue
 		var to: Vector2 = e.global_position - global_position
-		if to.length() > rng + e.get("radius"):
+		if to.length() > rng + e.radius:
 			continue
 		if facing.angle_to(to.normalized()) > arc * 0.5 and to.length() > 20.0:
 			continue
-		e.take_damage(dmg, to.normalized())
+		e.take_damage(dmg, to.normalized(), true, crit)
 
 
-func _fire_projectile(target_pos: Vector2, atk: Dictionary, dmg: float, from_player: bool) -> void:
-	var pool := get_tree().get_first_node_in_group("projectile_pool")
+func _fire_projectile(target_pos: Vector2, atk: Dictionary, dmg: float, from_player: bool, crit: bool = false) -> void:
+	var pool := get_tree().get_first_node_in_group("projectile_pool") as ProjectilePool
 	if pool == null:
 		return
 	var dir := (target_pos - global_position).normalized()
 	var color: Color = CLASS_COLORS.get(String(member.get("class_id", "")), Color.WHITE)
-	pool.fire(global_position, dir, float(atk.get("projectile_speed", 420.0)), dmg, from_player, color, 6.0, String(atk.get("on_hit", "")))
+	pool.fire(global_position, dir, float(atk.get("projectile_speed", 420.0)), dmg, from_player, color, 6.0, String(atk.get("on_hit", "")), crit)
 
 
 func _try_abilities(_delta: float) -> void:
@@ -186,8 +243,11 @@ func _cast_ability(ability_id: String, ability: Dictionary) -> bool:
 				var e := n as Enemy
 				if e != null and global_position.distance_to(e.global_position) < 150.0:
 					var to: Vector2 = (e.global_position - global_position).normalized()
-					e.take_damage(dmg, to)
+					e.take_damage(dmg, to, true)
 					e.stun_left = 1.5 + (0.5 if rank >= 2 else 0.0)
+			var pc2 := get_tree().get_first_node_in_group("warband_anchor") as PlayerController
+			if pc2 != null:
+				pc2.add_shake(float(Game.tun("feel.shake_on_shockwave", 0.2)))
 			return true
 		"blizzard":
 			var zone := get_tree().get_first_node_in_group("zone_layer") as ZoneLayer
@@ -197,10 +257,15 @@ func _cast_ability(ability_id: String, ability: Dictionary) -> bool:
 			zone.spawn_blizzard(center, 5.0, get_stat("attack_power") * 1.2)
 			return true
 		"blink":
-			var dir := velocity.normalized()
-			if dir == Vector2.ZERO:
-				dir = Vector2.RIGHT
-			global_position += dir * 220.0
+			# Group blink: the whole warband jumps forward. The group is the unit.
+			var anchor := get_tree().get_first_node_in_group("warband_anchor") as Node2D
+			if anchor == null:
+				return false
+			var mv := Vector2.RIGHT
+			var input_dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+			if input_dir.length() > 0.1:
+				mv = input_dir.normalized()
+			anchor.global_position += mv * 220.0
 			return true
 		"arcane_barrage":
 			var target := _pick_target(520.0)
@@ -232,8 +297,121 @@ func _cast_ability(ability_id: String, ability: Dictionary) -> bool:
 			var zone := get_tree().get_first_node_in_group("zone_layer") as ZoneLayer
 			if zone == null:
 				return false
-			var anchor := get_tree().get_first_node_in_group("warband_anchor")
+			var anchor := get_tree().get_first_node_in_group("warband_anchor") as Node2D
 			zone.spawn_hallowed(anchor.global_position if anchor else global_position, 6.0, get_stat("attack_power"))
+			return true
+		# ---- Ranger ----
+		"animal_companion":
+			if pet != null and is_instance_valid(pet):
+				return false  # already have one; passive
+			pet = Pet.new()
+			get_parent().add_child(pet)
+			pet.global_position = global_position + Vector2(-24, 18)
+			pet.owner_member = self
+			var prank := int(ability.get("rank", 1))
+			pet.damage_mult = 0.7 + 0.35 * (prank - 1)
+			pet.slow_on_hit = prank >= 3
+			return true
+		"aimed_shot":
+			var atarget := _pick_target(560.0)
+			if atarget == null:
+				return false
+			var arank := int(ability.get("rank", 1))
+			var admg := get_stat("attack_power") * (3.0 + arank)
+			var e := atarget as Enemy
+			if e != null and e.hp / maxf(1.0, e.max_hp) < 0.3:
+				admg *= 3.0  # execute
+			var adir: Vector2 = (atarget.global_position - global_position).normalized()
+			atarget.take_damage(admg, adir, true)
+			return true
+		"frost_trap":
+			var fzone := get_tree().get_first_node_in_group("zone_layer") as ZoneLayer
+			var fcenter := _densest_cluster(600.0)
+			if fcenter == Vector2.INF or fzone == null:
+				return false
+			fzone.spawn_frost_trap(fcenter, 6.0, get_stat("attack_power"))
+			return true
+		# ---- Shadowblade ----
+		"shadowstep":
+			var starget := _pick_target(520.0)
+			if starget == null:
+				return false
+			var srank := int(ability.get("rank", 1))
+			# Appear behind the target, blades already moving.
+			var away: Vector2 = (global_position - starget.global_position).normalized()
+			if away == Vector2.ZERO:
+				away = Vector2.RIGHT
+			global_position = starget.global_position + away * -44.0
+			member["buffs"]["shadowstep"] = 6.0 + 2.0 * (srank - 1)
+			if srank >= 3:
+				for n in get_tree().get_nodes_in_group("enemies"):
+					var se := n as Enemy
+					if se != null and global_position.distance_to(se.global_position) < 150.0:
+						se.stun_left = 1.0
+			return true
+		"fan_of_knives":
+			var frank := int(ability.get("rank", 1))
+			var knives := 10 + 4 * (frank - 1)
+			var fpool := get_tree().get_first_node_in_group("projectile_pool") as ProjectilePool
+			if fpool == null:
+				return false
+			for i in knives:
+				var kd := Vector2.RIGHT.rotated(TAU * i / knives)
+				fpool.fire(global_position, kd, 420.0, get_stat("attack_power") * 0.7, true, Color(0.8, 0.8, 0.9), 5.0, "")
+			return true
+		"evasion":
+			var vrank := int(ability.get("rank", 1))
+			member["buffs"]["evasion"] = 5.0
+			member["evasion_rank"] = vrank
+			return true
+		# ---- Stormcaller ----
+		"searing_totem":
+			var totem := Totem.new()
+			get_parent().add_child(totem)
+			totem.global_position = global_position
+			totem.owner_member = self
+			var trank := int(ability.get("rank", 1))
+			totem.duration = 12.0 + 4.0 * (trank - 1)
+			totem.left = totem.duration
+			totem.slow = trank >= 3
+			return true
+		"chain_lightning":
+			var ctarget := _pick_target(520.0)
+			if ctarget == null:
+				return false
+			var crank := int(ability.get("rank", 1))
+			var forks := 2 + crank  # 3 / 4 / 5
+			if has_affix("voltaic"):
+				forks += 2
+			var hit: Array = []
+			var current: Enemy = ctarget as Enemy
+			var cdmg := get_stat("attack_power") * 1.6
+			while current != null and forks > 0:
+				hit.append(current)
+				var cdir: Vector2 = (current.global_position - global_position).normalized()
+				current.take_damage(cdmg, cdir, true)
+				cdmg *= 0.8
+				forks -= 1
+				# Next: nearest unhit enemy within 220px of the current one.
+				var next: Enemy = null
+				var nd := 220.0 * 220.0
+				for n in get_tree().get_nodes_in_group("enemies"):
+					var ce := n as Enemy
+					if ce == null or ce in hit:
+						continue
+					var d := current.global_position.distance_squared_to(ce.global_position)
+					if d < nd:
+						nd = d
+						next = ce
+				current = next
+			return true
+		"bloodlust":
+			var brank := int(ability.get("rank", 1))
+			var dur := 8.0 + 2.0 * (brank - 1)
+			for n in get_tree().get_nodes_in_group("squad_members"):
+				var sm := n as SquadMember
+				if sm != null and bool(sm.member.get("alive", true)):
+					sm.member["buffs"]["bloodlust"] = dur
 			return true
 	return false
 
@@ -276,9 +454,18 @@ func heal(amount: float) -> void:
 	member["hp"] = minf(float(member.get("max_hp", 1.0)), float(member.get("hp", 0.0)) + amount)
 
 
+func _bloodlust_mult() -> float:
+	return 1.3 if "bloodlust" in member.get("buffs", {}) else 1.0
+
+
 func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO) -> void:
 	if not bool(member.get("alive", true)):
 		return
+	# Evasion: flat chance to ignore the hit entirely.
+	if "evasion" in member.get("buffs", {}):
+		var dodge := 0.3 + 0.15 * int(member.get("evasion_rank", 1))
+		if randf() < dodge:
+			return
 	var dmg := amount
 	# Tight stance: group mitigation aura.
 	if Game.stance == "tight":
@@ -292,15 +479,19 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO) -> void:
 		var absorbed: float = minf(shield, dmg)
 		member["shield"] = shield - absorbed
 		dmg -= absorbed
-	# Armor.
-	var armor := float(class_def.get("base_stats", {}).get("armor", 0.0))
+	# Armor (base + gear).
+	var armor := get_stat("armor")
 	dmg = dmg * 100.0 / (100.0 + armor * 5.0)
 	member["hp"] = float(member.get("hp", 0.0)) - dmg
+	flash_left = 0.12
 	if float(member["hp"]) <= 0.0:
 		member["hp"] = 0.0
 		member["alive"] = false
 		member["downed"] = true
 		set_physics_process(false)
+		var pc := get_tree().get_first_node_in_group("warband_anchor") as PlayerController
+		if pc != null:
+			pc.add_shake(float(Game.tun("feel.shake_on_downed", 0.5)))
 		queue_redraw()
 
 
@@ -351,6 +542,8 @@ func _draw() -> void:
 		return
 	draw_circle(Vector2.ZERO, body_radius, color)
 	draw_arc(Vector2.ZERO, body_radius, 0, TAU, 24, Color(0, 0, 0, 0.4), 2.0)
+	if flash_left > 0.0:
+		draw_circle(Vector2.ZERO, body_radius, Color(1, 0.25, 0.25, 0.6))
 	# Role pips: tank gets a ring, healer a cross.
 	var role := String(class_def.get("role", ""))
 	if role == "tank":

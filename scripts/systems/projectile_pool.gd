@@ -17,7 +17,7 @@ func _ready() -> void:
 		pool.append(p)
 
 
-func fire(pos: Vector2, dir: Vector2, speed: float, damage: float, from_player: bool, color: Color, radius: float, on_hit: String) -> void:
+func fire(pos: Vector2, dir: Vector2, speed: float, damage: float, from_player: bool, color: Color, radius: float, on_hit: String, crit: bool = false) -> void:
 	var p: Projectile = pool[cursor]
 	cursor = (cursor + 1) % POOL_SIZE
-	p.activate(pos, dir, speed, damage, from_player, color, radius, on_hit)
+	p.activate(pos, dir, speed, damage, from_player, color, radius, on_hit, crit)
