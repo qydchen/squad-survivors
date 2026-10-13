@@ -12,6 +12,8 @@ const MAX_SQUAD := 5
 var in_run := false
 var run_time := 0.0
 var tactically_paused := false
+var stance := "tight"  # "tight" | "spread" — group-level stance
+var focus_target: Node2D = null  # group focus target (right-click); validated by users
 
 # Squad: Array of Dictionaries {char_id, class_id, name, level, xp_to_next,
 # hp, max_hp, alive, abilities [], stats {}}
@@ -22,15 +24,40 @@ var run_level := 1  # number of level-ups earned from the shared pool
 
 
 func start_run(char_ids: Array) -> void:
-	squad.clear()
+	var chars: Array = []
 	for cid in char_ids.slice(0, MAX_SQUAD):
 		var c: Dictionary = Roster.get_character(String(cid))
-		if c.is_empty():
-			continue
+		if not c.is_empty():
+			chars.append(c)
+	_begin(chars)
+
+
+func start_run_debug(class_ids: Array) -> void:
+	# v0.1: throwaway characters that are NOT saved to the persistent roster.
+	var chars: Array = []
+	for i in class_ids.size():
+		var cid := String(class_ids[i])
+		chars.append({
+			"id": "debug_%d" % i,
+			"class_id": cid,
+			"name": cid.capitalize(),
+			"roster_level": 1,
+			"roster_xp": 0,
+			"gear": {"weapon": "", "armor": "", "trinket": ""},
+			"wounded_runs_left": 0,
+		})
+	_begin(chars)
+
+
+func _begin(chars: Array) -> void:
+	squad.clear()
+	for c in chars.slice(0, MAX_SQUAD):
 		squad.append(_make_runner(c))
 	run_time = 0.0
 	xp_pool = 0
 	run_level = 1
+	stance = "tight"
+	focus_target = null
 	in_run = true
 	tactically_paused = false
 
@@ -44,12 +71,17 @@ func _make_runner(c: Dictionary) -> Dictionary:
 		"char_id": c.get("id"),
 		"class_id": c.get("class_id"),
 		"name": c.get("name"),
+		"roster_level": int(c.get("roster_level", 1)),
 		"level": 1,
 		"xp_to_next": _xp_for_level(1),
 		"hp": 100.0 * hp_bonus,
+		"max_hp": 100.0 * hp_bonus,
 		"alive": true,
-		"abilities": [],
-		"stats": {},
+		"downed": false,
+		"abilities": [],       # [{id, name, cooldown, cd_left, rank}]
+		"stat_mults": {"attack_power": 1.0, "max_hp_mult": 1.0, "move_speed": 1.0, "pickup": 1.0, "crit": 0.0},
+		"buffs": {},           # {name: time_left}
+		"shield": 0.0,         # absorb pool (Aegis)
 	}
 
 
