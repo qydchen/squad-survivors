@@ -9,7 +9,8 @@ extends Node2D
 
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS
+	# NOTE: Main stays pausable (default). The R-restart shortcut lives in
+	# hud.gd because the HUD is PROCESS_MODE_ALWAYS and works while paused.
 	Game.level_up_ready.connect(_on_level_up_ready)
 	# Debug squad: 5 of the 6 classes (drops the Arcanist for this comp).
 	Game.start_run_debug(["bulwark", "cleric", "ranger", "shadowblade", "stormcaller"])
@@ -43,6 +44,7 @@ func _on_level_up_ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Main is pausable: this only fires while the sim is running.
 	if event.is_action_pressed("tactical_pause") and Game.in_run and not level_up_screen.visible:
 		Game.set_tactical_pause(not Game.tactically_paused)
 		get_viewport().set_input_as_handled()
@@ -52,8 +54,3 @@ func _unhandled_input(event: InputEvent) -> void:
 		inventory_screen.toggle()
 		get_viewport().set_input_as_handled()
 		return
-	if not Game.in_run and event is InputEventKey:
-		var k := event as InputEventKey
-		if k.pressed and not k.echo and k.keycode == KEY_R:
-			get_tree().paused = false
-			get_tree().reload_current_scene()

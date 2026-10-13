@@ -6,14 +6,23 @@ extends Node2D
 ##   RMB: group focus target             Space: tactical pause (in main.gd)
 
 const ARENA_HALF := 1500.0
-const GROUP_SPEED := 240.0
-const REVIVE_RADIUS := 70.0
-const REVIVE_TIME := 3.0
 
 var revive_progress := 0.0
 var reviving_member: SquadMember = null
 var trauma := 0.0  # camera shake 0..1
 var cam: Camera2D = null
+
+
+func group_speed() -> float:
+	return float(Game.tun("combat.group_speed", 240.0))
+
+
+func revive_radius() -> float:
+	return float(Game.tun("combat.revive_radius", 70.0))
+
+
+func revive_time() -> float:
+	return float(Game.tun("combat.revive_time", 3.0))
 
 
 func _ready() -> void:
@@ -30,7 +39,7 @@ func _physics_process(delta: float) -> void:
 	if not Game.in_run or Game.tactically_paused:
 		return
 	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	global_position += dir * GROUP_SPEED * delta
+	global_position += dir * group_speed() * delta
 	global_position.x = clampf(global_position.x, -ARENA_HALF, ARENA_HALF)
 	global_position.y = clampf(global_position.y, -ARENA_HALF, ARENA_HALF)
 	_apply_stance()
@@ -45,7 +54,7 @@ func _tick_shake(delta: float) -> void:
 
 
 func _apply_stance() -> void:
-	var spread := 0.65 if Game.stance == "tight" else 1.7
+	var spread := float(Game.tun("combat.tight_spread", 0.65)) if Game.stance == "tight" else float(Game.tun("combat.spread_spread", 1.7))
 	for n in get_tree().get_nodes_in_group("squad_members"):
 		var m := n as SquadMember
 		if m != null:
@@ -86,7 +95,7 @@ func _tick_revive(delta: float) -> void:
 	for n in get_tree().get_nodes_in_group("squad_members"):
 		var m := n as SquadMember
 		if m != null and bool(m.member.get("downed", false)):
-			if global_position.distance_to(m.global_position) < REVIVE_RADIUS + 90.0:
+			if global_position.distance_to(m.global_position) < revive_radius() + 90.0:
 				candidate = m
 				break
 	if candidate == null:
@@ -97,7 +106,7 @@ func _tick_revive(delta: float) -> void:
 		reviving_member = candidate
 		revive_progress = 0.0
 	revive_progress += delta
-	if revive_progress >= REVIVE_TIME:
+	if revive_progress >= revive_time():
 		reviving_member.revive()
 		revive_progress = 0.0
 		reviving_member = null

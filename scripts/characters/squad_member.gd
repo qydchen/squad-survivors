@@ -467,9 +467,9 @@ func take_damage(amount: float, from_dir: Vector2 = Vector2.ZERO) -> void:
 		if randf() < dodge:
 			return
 	var dmg := amount
-	# Tight stance: group mitigation aura.
+	# Tight stance: group mitigation aura (tuning: combat.tight_mitigation).
 	if Game.stance == "tight":
-		dmg *= 0.85
+		dmg *= float(Game.tun("combat.tight_mitigation", 0.85))
 	# Shield Wall buff.
 	if member.get("buffs", {}).has("shield_wall"):
 		dmg *= 0.4

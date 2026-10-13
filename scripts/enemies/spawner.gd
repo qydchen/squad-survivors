@@ -4,7 +4,10 @@ extends Node2D
 
 const ARENA_HALF := 1500.0
 const SPAWN_RADIUS := 760.0
-const MAX_ALIVE := 140
+
+
+func _max_alive() -> int:
+	return int(Game.tun("spawner.max_alive", 140))
 
 var elapsed := 0.0
 var spawn_timer := 0.0
@@ -24,20 +27,22 @@ func _physics_process(delta: float) -> void:
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		_spawn_wave()
-		# Interval shrinks over time: 1.1s -> ~0.3s at 20 min.
-		spawn_timer = maxf(0.28, 1.1 - elapsed * 0.0007)
+		# Interval shrinks over time (tuning: spawner.interval_*).
+		spawn_timer = maxf(float(Game.tun("spawner.interval_min", 0.28)),
+			float(Game.tun("spawner.interval_base", 1.1)) - elapsed * float(Game.tun("spawner.interval_decay_per_sec", 0.0007)))
 
 
 func _spawn_wave() -> void:
+	var max_alive := _max_alive()
 	var alive := get_tree().get_nodes_in_group("enemies").size()
-	if alive >= MAX_ALIVE:
+	if alive >= max_alive:
 		return
 	var anchor := get_tree().get_first_node_in_group("warband_anchor")
 	if anchor == null:
 		return
-	var batch := int(3 + elapsed / 45.0)
+	var batch := int(float(Game.tun("spawner.batch_base", 3.0)) + elapsed * float(Game.tun("spawner.batch_per_sec", 0.022)))
 	for i in batch:
-		if get_tree().get_nodes_in_group("enemies").size() >= MAX_ALIVE:
+		if get_tree().get_nodes_in_group("enemies").size() >= max_alive:
 			break
 		_spawn_one(anchor.global_position)
 
@@ -65,7 +70,7 @@ func _spawn_one(anchor_pos: Vector2) -> void:
 	var def_path := "res://data/enemies/%s.json" % type_id
 	var def: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(def_path))
 	# HP scales gently with time so the threat keeps up (tuning knob).
-	def["hp"] = float(table[type_id]["hp"]) * (1.0 + elapsed / 600.0)
+	def["hp"] = float(table[type_id]["hp"]) * (1.0 + elapsed * float(Game.tun("spawner.hp_scale_per_sec", 0.00167)))
 	var e := Enemy.new()
 	e.add_to_group("enemies")
 	# Random point on ring, clamped to arena.

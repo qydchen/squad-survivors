@@ -184,8 +184,9 @@ func _update_squad_frames() -> void:
 func _update_revive() -> void:
 	var pc := get_tree().get_first_node_in_group("warband_anchor")
 	if pc != null and float(pc.get("revive_progress")) > 0.0:
+		var rt: float = float(Game.tun("combat.revive_time", 3.0))
 		revive_label.visible = true
-		revive_label.text = "Reviving… %d%%" % int(100.0 * float(pc.get("revive_progress")) / 3.0)
+		revive_label.text = "Reviving… %d%%" % int(100.0 * float(pc.get("revive_progress")) / rt)
 	else:
 		revive_label.visible = false
 
@@ -222,3 +223,20 @@ func _on_run_ended(victory: bool) -> void:
 	end_title.text = "EXTRACTED" if victory else "WIPED"
 	end_title.modulate = Color(0.4, 1.0, 0.5) if victory else Color(1.0, 0.4, 0.4)
 	end_panel.visible = true
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# HUD is PROCESS_MODE_ALWAYS, so this works while the tree is paused.
+	# Space unpauses (Main is pausable, so it can't hear Space while paused).
+	# Never unpause under the level-up screen — that decision is mandatory.
+	if Game.tactically_paused and event.is_action_pressed("tactical_pause"):
+		var lus := get_node_or_null("../LevelUpScreen") as CanvasLayer
+		if lus == null or not lus.visible:
+			Game.set_tactical_pause(false)
+			get_viewport().set_input_as_handled()
+		return
+	if not Game.in_run and event is InputEventKey:
+		var k := event as InputEventKey
+		if k.pressed and not k.echo and k.keycode == KEY_R:
+			get_tree().paused = false
+			get_tree().reload_current_scene()

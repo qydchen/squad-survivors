@@ -98,7 +98,7 @@ func start_run_debug(class_ids: Array) -> void:
 			"name": cid.capitalize(),
 			"roster_level": 1,
 			"roster_xp": 0,
-			"gear": {"weapon": "", "armor": "", "trinket": ""},
+			"gear": {"weapon": {}, "armor": {}, "trinket": {}},
 			"wounded_runs_left": 0,
 		})
 	_begin(chars)
@@ -199,7 +199,8 @@ func roll_drop() -> Dictionary:
 		float(tun("drops.base_chance", 0.035)) + minutes * float(tun("drops.time_scale_per_min", 0.004)))
 	if randf() > chance or item_defs.is_empty():
 		return {}
-	var weights: Dictionary = tun("drops.rarity_weights", {"common": 50.0, "magic": 28.0, "rare": 14.0, "epic": 6.0, "legendary": 2.0})
+	var weights: Dictionary = (tun("drops.rarity_weights", {"common": 50.0, "magic": 28.0, "rare": 14.0, "epic": 6.0, "legendary": 2.0}) as Dictionary).duplicate()
+	# Legendary odds creep up over the run. (Duplicate above: never mutate the live tuning config.)
 	# Legendary odds creep up over the run.
 	weights["legendary"] = float(weights.get("legendary", 2.0)) + minutes * float(tun("drops.legendary_weight_per_min", 0.35))
 	var total := 0.0

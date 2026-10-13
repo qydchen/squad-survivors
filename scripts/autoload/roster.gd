@@ -36,7 +36,7 @@ func add_character(class_id: String, char_name: String) -> Dictionary:
 		"name": char_name,
 		"roster_level": 1,
 		"roster_xp": 0,
-		"gear": {"weapon": "", "armor": "", "trinket": ""},
+		"gear": {"weapon": {}, "armor": {}, "trinket": {}},
 		"wounded_runs_left": 0,
 	}
 	characters.append(char)

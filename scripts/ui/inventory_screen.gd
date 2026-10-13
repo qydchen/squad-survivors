@@ -143,7 +143,7 @@ func _stat_summary(item: Dictionary) -> String:
 		var v := float((item.get("stats", {}) as Dictionary)[k])
 		var label := String(k).replace("_pct", "% ").replace("_flat", " ").replace("_", " ").strip_edges()
 		if String(k).ends_with("_pct"):
-			parts.append("+%d%%%s" % [int(v * 100.0), label.replace("% ", "")])
+			parts.append("+%d%% %s" % [int(v * 100.0), label.replace("% ", "")])
 		else:
 			parts.append("+%d %s" % [int(v), label])
 	var affix := String(item.get("affix", ""))
