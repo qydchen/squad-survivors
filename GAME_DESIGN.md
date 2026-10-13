@@ -43,23 +43,28 @@ DRAFT (pick 5, gear up, read forecast)
   they are **Wounded** and sit out the next run. (XCOM wound system, lite.)
 - **Timer:** 20:00. Boss at 10:00, final boss at 20:00, extract on kill.
 
-### Squad control (the crux of the design)
+### Squad control
 
-Moment-to-moment play must feel like a bullet-heaven, not an RTS. Two layers:
+You do **not** command five characters. You control **one group** that happens to
+contain five characters. There is no per-character micro — ever.
 
-1. **Leader-follow (default).** WASD / mouse moves the warband anchor. Members hold
-   formation offsets by role: melee/tank front arc, ranged rear, healer center.
-   All attacks are automatic (VS-style). This is 90% of play.
-2. **Tactical pause (Space).** Freezes the action (XCOM-style). While paused:
-   - Click a member, click a destination → individual move order.
-   - Right-click an enemy → focus-fire order for the squad.
-   - Open inventory (Tab) without time pressure.
-   
-   Resume and watch the plan execute. Cooldown-free, but the game is balanced
-   around *not* pausing constantly — pausing is for repositioning before a boss
-   phase or saving a downed ally, not for micromanaging every second.
+- **Move the group.** WASD / mouse steers the group anchor. Members automatically
+  hold formation slots by role: tanks and melee front, healer center, ranged rear.
+  All attacks are automatic (VS-style).
+- **Group-level orders only** — the entire tactical layer:
+  - **Right-click an enemy:** group focus target. Single-target abilities and
+    attacks prioritize it. (The answer to Menders and priority targets.)
+  - **Stance toggle (C):** *Tight* (clustered: +mitigation aura, vulnerable to AoE
+    and Volatile) vs *Spread* (loose: safe vs artillery/explosions, weaker
+    focused damage). Stance is the moment-to-moment positioning decision.
+  - **Space — tactical pause:** freezes the sim for *decisions* (level-up picks,
+    inventory, assessing a boss phase), not for issuing unit orders.
+- **Revive:** steer the group onto a downed ally and hold 3s to channel
+  (interruptible by damage — rescue missions are tense on purpose).
 
-v2 consideration: Tab-cycling direct control of one member. Not for the slice.
+Skill expression is: *where the group stands, what stance it's in, what it
+focuses* — plus everything decided in the draft. The XCOM half lives in
+preparation and group-level calls, not in unit micromanagement.
 
 ## Classes
 
@@ -183,7 +188,7 @@ Multiplayer · mobile · modding support · trading/economy. Single-player PC fi
 
 - **v0.1 — vertical slice.** 3 classes, 1 arena, 10-minute run, leader-follow +
   tactical pause, basic enemies (swarmer/shieldbearer/stinger), no meta systems.
-  Question to answer: *is commanding 5 characters in a bullet-heaven fun?*
+  Question to answer: *does steering a 5-character group as one unit feel good?*
 - **v0.2 — the loop.** 6 classes, gear drops + stash, 20-minute runs, elites +
   affixes, draft screen with forecast, roster wounds.
 - **v0.3 — the warband.** Warband talent tree, roster levels, bosses with phases,
@@ -192,7 +197,7 @@ Multiplayer · mobile · modding support · trading/economy. Single-player PC fi
 
 ## Open questions
 
-- Direct-control swap (Tab) vs. pure leader-follow — playtest in v0.1.
+- Stance design: is Tight/Spread enough tactical texture, or do we need a third stance (e.g. Focus: +damage, -defense)? Playtest in v0.1.
 - Should XP gems magnetize to the nearest member or the anchor? (Try anchor first.)
 - Revive channel: interruptible by damage? (Yes, leaning — creates rescue tension.)
 - Roguelite run modifiers (heat system)? Post-launch.

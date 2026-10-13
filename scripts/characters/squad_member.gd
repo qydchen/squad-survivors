@@ -5,8 +5,7 @@ extends CharacterBody2D
 var member: Dictionary = {}      # the Game.squad entry
 var class_def: Dictionary = {}   # loaded from data/classes/
 var formation_offset := Vector2.ZERO
-var move_order := Vector2.ZERO   # set via tactical pause; ZERO = follow anchor
-var has_move_order := false
+var stance_spread := 1.0  # set by the group controller: <1 Tight, >1 Spread
 var attack_cooldown := 0.0
 
 
@@ -50,12 +49,11 @@ func _physics_process(delta: float) -> void:
 
 
 func _move_target() -> Vector2:
-	if has_move_order:
-		return move_order
-	# Follow the warband anchor (set by the player controller) + formation offset.
+	# No per-character orders: the group is the unit of control.
+	# Members hold formation around the warband anchor; stance widens/narrows it.
 	var anchor := get_tree().get_first_node_in_group("warband_anchor")
 	if anchor:
-		return anchor.global_position + formation_offset
+		return anchor.global_position + formation_offset * stance_spread
 	return global_position
 
 
